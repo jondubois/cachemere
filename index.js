@@ -16,6 +16,9 @@ var Resource = function () {
 Resource.prototype.output = function (response) {
 	response.writeHead(this.status, this.headers);
 	if (this.content && this.content.pipe) {
+		this.content.on('error', function () {
+			response.destroy();
+		});
 		this.content.pipe(response);
 	} else {
 		response.end(this.content);
@@ -43,8 +46,6 @@ Cachemere.prototype.init = function (options) {
 	var mainDir = pathManager.dirname(require.main.filename) + '/';
 	
 	this._options = {
-		clientCacheLife: 2592000,
-		clientCacheType: 'public',
 		compress: true,
 		pathConverter: function (url) {
 			return mainDir + url;
@@ -63,25 +64,14 @@ Cachemere.prototype.init = function (options) {
 	this._urlPreps = {};
 	this._extPreps = {};
 	
-	this._headerGen = function (cacheData, disableClientCache) {
-		var headers;
-		if (disableClientCache) {
-			headers = {
-				'Content-Encoding': self._encoding,
-				'Cache-Control': 'no-cache, must-revalidate',
-				'Pragma': 'no-cache',
-				'ETag': cacheData.modified
-			};
-		} else {
-			var exp = new Date(Date.now() + self._options.clientCacheLife * 1000).toUTCString();
-			headers = {
-				'Content-Encoding': self._encoding,
-				'Content-Type': cacheData.mime,
-				'Cache-Control': self._options.clientCacheType,
-				'Pragma': self._options.clientCacheType,
-				'Expires': exp,
-				'ETag': cacheData.modified
-			};
+	this._headerGen = function (cacheData) {
+		var headers = {
+			'Content-Type': cacheData.mime,
+			'ETag': cacheData.modified
+		};
+		
+		if (self._options.compress) {
+			headers['Content-Encoding'] = self._encoding;
 		}
 		
 		return headers;
@@ -91,10 +81,6 @@ Cachemere.prototype.init = function (options) {
 		var headers = self._cache.getHeaders(self._encoding, url);
 		if (headers['ETag'] != null) {
 			headers['ETag'] = self.getModifiedTime(url);
-		}
-		if (headers['Expires'] != null) {
-			var exp = new Date(Date.now() + self._options.clientCacheLife * 1000).toUTCString();
-			headers['Expires'] = exp;
 		}
 	};
 	
@@ -121,6 +107,10 @@ Cachemere.prototype.init = function (options) {
 	});
 };
 
+Cachemere.prototype._triggerError = function (err) {
+	this.emit('error', err);
+};
+
 Cachemere.prototype._handleFileChange = function (url, path) {
 	this._fetch(url, path);
 };
@@ -140,9 +130,6 @@ Cachemere.prototype._read = function (url, path, cb) {
 		var stream = null;
 		if (exists) {
 			stream = fs.createReadStream(path);
-			stream.on('error', function (err) {
-				stream.end();
-			});
 			cb(null, stream);
 		} else {
 			self._cache.clear(null, url);
@@ -176,18 +163,24 @@ Cachemere.prototype._preprocess = function (url, path, stream, cb) {
 				content: resBuffer
 			};
 			
-			preprocessor(resourceData, function (processedBuffer) {
-				self._cache.set(self._cache.ENCODING_PLAIN, url, processedBuffer);
-				cb(null, processedBuffer);
-			});
+			if (stream.error) {
+				cb(stream.error);
+			} else {
+				preprocessor(resourceData, function (processedBuffer) {
+					self._cache.set(self._cache.ENCODING_PLAIN, url, processedBuffer);
+					cb(null, processedBuffer);
+				});
+			}
 		});
 	} else {
 		stream.on('data', function (data) {
 			buffers.push(data);
 		});
 		stream.on('end', function () {
-			var resBuffer = Buffer.concat(buffers);
-			self._cache.set(self._cache.ENCODING_PLAIN, url, resBuffer);
+			if (!stream.error) {
+				var resBuffer = Buffer.concat(buffers);
+				self._cache.set(self._cache.ENCODING_PLAIN, url, resBuffer);
+			}
 		});
 		cb(null, stream);
 	}
@@ -218,16 +211,20 @@ Cachemere.prototype._compress = function (url, content, cb) {
 		});
 		
 		compressorStream.on('error', function (err) {
-			compressorStream.end();
+			compressorStream.error = err;
+			self._triggerError(err);
 		});
 		
 		compressorStream.on('end', function () {
-			var data, buf;
-			var resBuffer = Buffer.concat(buffers);
-			self._cache.set(self._encoding, url, resBuffer);
+			if (!content.error && !compressorStream.error) {
+				var resBuffer = Buffer.concat(buffers);
+				self._cache.set(self._encoding, url, resBuffer);
+			}
 		});
 		
 		content.on('error', function (err) {
+			content.error = err;
+			compressorStream.end();
 			compressorStream.emit('error', err);
 		});
 		
@@ -239,33 +236,27 @@ Cachemere.prototype._compress = function (url, content, cb) {
 Cachemere.prototype._fetch = function (url, path, callback) {
 	var self = this;
 	
-	async.waterfall([
+	var tasks = [
 		this._read.bind(this, url, path),
-		this._preprocess.bind(this, url, path),
-		this._compress.bind(this, url)
-	], function (err, content) {
+		this._preprocess.bind(this, url, path)
+	];
+	
+	if (this._options.compress) {
+		tasks.push(this._compress.bind(this, url));
+	}
+	
+	async.waterfall(tasks, function (err, content) {
 		self._updateHeaderTimes(url);
 		callback && callback(err, content);
 	});
 };
 
-/*
-	fetch(req, [disableClientCache], callback)
-*/
-Cachemere.prototype.fetch = function () {
+Cachemere.prototype.fetch = function (req, callback) {
+	var self = this;
+	
 	var req = arguments[0];
 	var url = req.url;
 	var reqHeaders = req.headers || {};
-	
-	if (arguments[1] instanceof Function) {
-		disableClientCache = false;
-		callback = arguments[1];
-	} else {
-		disableClientCache = arguments[1];
-		callback = arguments[2];
-	}
-	
-	var self = this;
 	
 	var res = new Resource();
 	
@@ -308,7 +299,7 @@ Cachemere.prototype.fetch = function () {
 				res.content = content;
 				res.modified = self.getModifiedTime(url);
 				res.type = self.RESOURCE_TYPE_STREAM;
-				res.headers = self._headerGen(res, disableClientCache);
+				res.headers = self._headerGen(res);
 				self._cache.setHeaders(self._encoding, url, res.headers);
 			}
 			callback(err, res);
