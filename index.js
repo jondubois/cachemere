@@ -6,6 +6,7 @@ var mime = require('mime');
 var pathManager = require('path');
 var Readable = require('stream').Readable;
 var EventEmitter = require('events').EventEmitter;
+var crypto = require('crypto');
 
 var Resource = function () {
 	this.status = 200;
@@ -66,9 +67,13 @@ Cachemere.prototype.init = function (options) {
 	
 	this._headerGen = function (cacheData) {
 		var headers = {
-			'Content-Type': cacheData.mime,
-			'ETag': cacheData.modified
+			'Content-Type': cacheData.mime
 		};
+		
+		var eTag = self._cache.getHeader(self._encoding, cacheData.url, 'ETag');
+		if (eTag != null) {
+			headers['ETag'] = eTag;
+		}
 		
 		if (self._options.compress) {
 			headers['Content-Encoding'] = self._encoding;
@@ -77,17 +82,24 @@ Cachemere.prototype.init = function (options) {
 		return headers;
 	};
 	
-	this._updateHeaderTimes = function (url) {
+	this._updateETag = function (url) {
 		var headers = self._cache.getHeaders(self._encoding, url);
-		if (headers['ETag'] != null) {
-			headers['ETag'] = self.getModifiedTime(url);
+		var content = self._cache.get(self._encoding, url);
+		if (content != null) {
+			var shasum = crypto.createHash('sha1');
+			if (content instanceof Buffer) {
+				shasum.update(content);
+			} else {
+				shasum.update(content, 'utf8');
+			}
+			headers['ETag'] = shasum.digest('hex');
 		}
 	};
 	
 	this._watchers = {};
 	this._extRegex = /\.([^.]*)$/;
 	
-	this._cache.on('set', function (url) {
+	this._cache.on('set', function (url, encoding) {
 		if (self._watchers[url] == null) {
 			var path = self._pathConverter(url);
 			fs.exists(path, function (exists) {
@@ -95,6 +107,9 @@ Cachemere.prototype.init = function (options) {
 					self._watchers[url] = fs.watch(path, self._handleFileChange.bind(self, url, path));
 				}
 			});
+		}
+		if (encoding == self._encoding) {
+			self._updateETag(url);
 		}
 	});
 	
@@ -246,7 +261,6 @@ Cachemere.prototype._fetch = function (url, path, callback) {
 	}
 	
 	async.waterfall(tasks, function (err, content) {
-		self._updateHeaderTimes(url);
 		callback && callback(err, content);
 	});
 };
@@ -269,13 +283,13 @@ Cachemere.prototype.fetch = function (req, callback) {
 		this.emit('hit', url);
 		res.content = this._cache.get(this._encoding, url);
 		res.modified = this.getModifiedTime(url);
+		var hash = this._cache.getHeader(this._encoding, url, 'ETag');
 		var ifNoneMatch = reqHeaders['if-none-match'];
-		if (ifNoneMatch != null && ifNoneMatch == res.modified) {
+		if (ifNoneMatch != null && ifNoneMatch == hash) {
 			res.status = 304;
 			res.content = null;
 		} else {
 			res.status = 200;
-			this._cache.setHeader(this._encoding, url, 'ETag', res.modified);
 		}
 		res.type = this.RESOURCE_TYPE_BUFFER;
 		res.headers = this._cache.getHeaders(this._encoding, url);
