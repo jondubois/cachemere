@@ -48,6 +48,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._options = {
 		compress: true,
+		useETags: true,
 		pathConverter: function (url) {
 			return mainDir + url;
 		}
@@ -59,6 +60,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._cache = new Cache(this._options);
 	
+	this._useETags = this._options.useETags;
 	this._pathConverter = this._options.pathConverter;
 	this._encoding = this._options.compress ? 'gzip' : this._cache.ENCODING_PLAIN;
 	
@@ -70,9 +72,11 @@ Cachemere.prototype.init = function (options) {
 			'Content-Type': cacheData.mime
 		};
 		
-		var eTag = self._cache.getHeader(self._encoding, cacheData.url, 'ETag');
-		if (eTag != null) {
-			headers['ETag'] = eTag;
+		if (self._useETags) {
+			var eTag = self._cache.getHeader(self._encoding, cacheData.url, 'ETag');
+			if (eTag != null) {
+				headers['ETag'] = eTag;
+			}
 		}
 		
 		if (self._options.compress) {
@@ -108,7 +112,7 @@ Cachemere.prototype.init = function (options) {
 				}
 			});
 		}
-		if (encoding == self._encoding) {
+		if (self._useETags && encoding == self._encoding) {
 			self._updateETag(url);
 		}
 	});
