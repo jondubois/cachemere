@@ -5,24 +5,27 @@ var Cache = function (options) {
 	self.ENCODING_PLAIN = 'plain';
 	self.ENCODING_SEPARATOR = '::';
 	
-	self._cache = {};
-	self._encodings = {};
+	self.reset = function () {
+		self._cache = {};
+		self._encodings = {};
+		self._totalSize = 0;
+		
+		self._head = {
+			prev: null
+		};
+		self._tail = {
+			next: null
+		};
+		self._head.next = self._tail;
+		self._tail.prev = self._head;
+	};
+	
+	self.reset();
 	
 	self._cacheFilter = options.cacheFilter;
 	self._maxSize = options.maxSize || 1000000000;
-	self._maxEntrySize = options.maxEntrySize || 5000000;
+	self._maxEntrySize = options.maxEntrySize || 10000000;
 	self._minCacheLifeMillis = options.minCacheLifeMillis || 0;
-	
-	self._totalSize = 0;
-	
-	self._head = {
-		prev: null
-	};
-	self._tail = {
-		next: null
-	};
-	self._head.next = self._tail;
-	self._tail.prev = self._head;
 	
 	self._getFullKey = function (encoding, key) {
 		return encoding + self.ENCODING_SEPARATOR + key;
@@ -66,16 +69,15 @@ var Cache = function (options) {
 	};
 	
 	self.set = function (encoding, key, data, permanent) {
-		if (!(data instanceof Buffer || typeof data == 'string')) {
+		if (typeof data == 'string') {
+			data = new Buffer(data);
+		}
+		
+		if (!(data instanceof Buffer)) {
 			return false;
 		}
 		
-		var size;
-		if (data instanceof Buffer) {
-			size = data.length;
-		} else {
-			size = Buffer.byteLength(data, 'utf8')
-		}
+		var size = data.length;
 		if (size > self._maxEntrySize || (self._cacheFilter && !self._cacheFilter(key))) {
 			return false;
 		}

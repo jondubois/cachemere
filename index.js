@@ -3,7 +3,7 @@ var async = require('async');
 var zlib = require('zlib');
 var fs = require('fs');
 var mime = require('mime');
-var pathManager = require('path');
+var path = require('path');
 var Readable = require('stream').Readable;
 var EventEmitter = require('events').EventEmitter;
 var crypto = require('crypto');
@@ -30,11 +30,9 @@ var Cachemere = function () {
 	this.RESOURCE_TYPE_STREAM = 'stream';
 	this.RESOURCE_TYPE_BUFFER = 'buffer';
 	
-	this.PREPROCESSOR_TYPE_URL = 'url';
-	this.PREPROCESSOR_TYPE_EXTENSION = 'extension';
-	
-	this.ERROR_TYPE_COMPRESSION = 'compression';
 	this.ERROR_TYPE_READ = 'read';
+	this.ERROR_TYPE_COMPRESS = 'compress';
+	this.ERROR_TYPE_PREP = 'prep';
 	
 	this.init();
 };
@@ -44,7 +42,7 @@ Cachemere.prototype = Object.create(EventEmitter.prototype);
 Cachemere.prototype.init = function (options) {
 	var self = this;
 	
-	var mainDir = pathManager.dirname(require.main.filename) + '/';
+	var mainDir = path.dirname(require.main.filename) + '/';
 	
 	this._options = {
 		compress: true,
@@ -64,8 +62,7 @@ Cachemere.prototype.init = function (options) {
 	this._pathConverter = this._options.pathConverter;
 	this._encoding = this._options.compress ? 'gzip' : this._cache.ENCODING_PLAIN;
 	
-	this._urlPreps = {};
-	this._extPreps = {};
+	this._prepProvider = null;
 	
 	this._headerGen = function (cacheData) {
 		var headers = {
@@ -101,14 +98,13 @@ Cachemere.prototype.init = function (options) {
 	};
 	
 	this._watchers = {};
-	this._extRegex = /\.([^.]*)$/;
 	
 	this._cache.on('set', function (url, encoding) {
 		if (self._watchers[url] == null) {
-			var path = self._pathConverter(url);
-			fs.exists(path, function (exists) {
+			var filePath = self._pathConverter(url);
+			fs.exists(filePath, function (exists) {
 				if (exists) {
-					self._watchers[url] = fs.watch(path, self._handleFileChange.bind(self, url, path));
+					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath));
 				}
 			});
 		}
@@ -119,7 +115,6 @@ Cachemere.prototype.init = function (options) {
 	
 	this._cache.on('clear', function (url) {
 		if (self._watchers[url] != null) {
-			var path = self._pathConverter(url);
 			self._watchers[url].close();
 			delete self._watchers[url];
 		}
@@ -130,25 +125,17 @@ Cachemere.prototype._triggerError = function (err) {
 	this.emit('error', err);
 };
 
-Cachemere.prototype._handleFileChange = function (url, path) {
-	this._fetch(url, path);
+Cachemere.prototype._handleFileChange = function (url, filePath) {
+	this._fetch(url, filePath);
 };
 
-Cachemere.prototype._getExtension = function (url) {
-	var extMatches = url.match(this._extRegex);
-	if (extMatches) {
-		return extMatches[1];
-	}
-	return '';
-};
-
-Cachemere.prototype._read = function (url, path, cb) {
+Cachemere.prototype._read = function (url, filePath, cb) {
 	var self = this;
 	
-	fs.exists(path, function (exists) {
+	fs.exists(filePath, function (exists) {
 		var stream = null;
 		if (exists) {
-			stream = fs.createReadStream(path);
+			stream = fs.createReadStream(filePath);
 			cb(null, stream);
 		} else {
 			self._cache.clear(null, url);
@@ -159,13 +146,12 @@ Cachemere.prototype._read = function (url, path, cb) {
 	});
 };
 
-Cachemere.prototype._preprocess = function (url, path, stream, cb) {
+Cachemere.prototype._preprocess = function (url, filePath, stream, cb) {
 	var self = this;
 	
-	var preprocessor = this._urlPreps[url];
-	if (preprocessor == null) {
-		var ext = this._getExtension(url);
-		preprocessor = this._extPreps[ext];
+	var preprocessor;
+	if (this._prepProvider) {
+		preprocessor = this._prepProvider(url);
 	}
 
 	var buffers = [];
@@ -178,17 +164,33 @@ Cachemere.prototype._preprocess = function (url, path, stream, cb) {
 			
 			var resourceData = {
 				url: url,
-				path: path,
+				path: filePath,
 				content: resBuffer
 			};
 			
 			if (stream.error) {
 				cb(stream.error);
 			} else {
-				preprocessor(resourceData, function (processedBuffer) {
-					self._cache.set(self._cache.ENCODING_PLAIN, url, processedBuffer);
-					cb(null, processedBuffer);
+				var result = preprocessor(resourceData, function (err, content) {
+					if (!(content instanceof Buffer)) {
+						content = new Buffer(content);
+					}
+					if (!(err instanceof Error)) {
+						err = new Error(err);
+					}
+					err.type = self.ERROR_TYPE_PREP;
+					
+					self._cache.set(self._cache.ENCODING_PLAIN, url, content);
+					cb(err, content);
 				});
+				
+				if (result != null) {
+					if (!(result instanceof Buffer)) {
+						result = new Buffer(result);
+					}
+					self._cache.set(self._cache.ENCODING_PLAIN, url, result);
+					cb(null, result);
+				}
 			}
 		});
 	} else {
@@ -214,7 +216,7 @@ Cachemere.prototype._compress = function (url, content, cb) {
 				if (!(err instanceof Error)) {
 					err = new Error(err);
 				}
-				err.type = self.ERROR_TYPE_COMPRESSION;
+				err.type = self.ERROR_TYPE_COMPRESS;
 				cb(err);
 			} else {
 				self._cache.set(self._encoding, url, result);
@@ -252,12 +254,12 @@ Cachemere.prototype._compress = function (url, content, cb) {
 	}
 };
 
-Cachemere.prototype._fetch = function (url, path, callback) {
+Cachemere.prototype._fetch = function (url, filePath, callback) {
 	var self = this;
 	
 	var tasks = [
-		this._read.bind(this, url, path),
-		this._preprocess.bind(this, url, path)
+		this._read.bind(this, url, filePath),
+		this._preprocess.bind(this, url, filePath)
 	];
 	
 	if (this._options.compress) {
@@ -280,7 +282,6 @@ Cachemere.prototype.fetch = function (req, callback) {
 	
 	res.url = url;
 	res.encoding = this._encoding;
-	res.extension = this._getExtension(url);
 	res.mime = mime.lookup(url);
 	
 	if (this._cache.has(this._encoding, url)) {
@@ -300,15 +301,19 @@ Cachemere.prototype.fetch = function (req, callback) {
 		callback(null, res);
 	} else {
 		this.emit('miss', url);
-		var path = this._pathConverter(url);
-		this._fetch(url, path, function (err, content) {
+		var filePath = this._pathConverter(url);
+		this._fetch(url, filePath, function (err, content) {
 			if (err) {
 				if (err.type == self.ERROR_TYPE_READ) {
 					res.status = 404;
 				} else {
 					res.status = 500;
 				}
-				res.content = err.message + '.';
+				if (err instanceof Error) {
+					res.content = err.message + '.';
+				} else {
+					res.content = err + '.';
+				}
 				res.headers = {
 					'Content-Type': 'text/html'
 				};
@@ -341,20 +346,16 @@ Cachemere.prototype.has = function (url) {
 	return this._cache.has(this._encoding, url);
 };
 
-Cachemere.prototype.setPreprocessor = function (preprocessor) {
-	if (type == this.PREPROCESSOR_TYPE_URL) {
-		this._urlPreps[value] = preprocessor;
-	} else if (type == this.PREPROCESSOR_TYPE_EXTENSION) {
-		this._extPreps[value] = preprocessor;
-	}
+Cachemere.prototype.reset = function () {
+	return this._cache.reset();
 };
 
-Cachemere.prototype.removePreprocessor = function (type, value) {
-	if (type == this.PREPROCESSOR_TYPE_URL) {
-		delete this._urlPreps[value];
-	} else if (type == this.PREPROCESSOR_TYPE_EXTENSION) {
-		delete this._extPreps[value];
-	}
+Cachemere.prototype.setPrepProvider = function (prepProvider) {
+	this._prepProvider = prepProvider;
+};
+
+Cachemere.prototype.getPrepProvider = function () {
+	return this._prepProvider;
 };
 
 module.exports = new Cachemere();
