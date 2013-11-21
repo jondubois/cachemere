@@ -32,7 +32,7 @@ var server = http.createServer(function (req, res) {
 });
 ```
 
-<hr><br>
+<hr>
 
 ## API
 
