@@ -23,7 +23,10 @@ var http = require('http');
 
 var server = http.createServer(function (req, res) {
     cachemere.fetch(req, function (err, resource) {
-		// Note that you can manipulate the Resource object's properties before outputting it to the response.
+		/*
+		Note that you can manipulate the Resource object's 
+		properties before outputting it to the response.
+		*/
         resource.output(res);
     });
 });
@@ -31,7 +34,7 @@ var server = http.createServer(function (req, res) {
 
 <hr><br>
 
-**API**
+## API
 
 #### Top-level
 
@@ -105,7 +108,7 @@ These are exposed by `require('cachemere')`:
 	
 #### Resource
 
-A resource object which is a representation of a resource on disk or in cache.
+A resource object is a representation of a resource on disk or in cache.
 This resource can be output directly to an HTTP response object.
 Note that you can manipulate any of the properties of a Resource before outputting it to a response in order to customize the behaviour.
 
