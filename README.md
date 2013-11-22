@@ -3,7 +3,7 @@ Cachemere
 
 A nice, smooth, cushiony layer of cache.
 
-Cachemere is a server-side static file caching engine which greatly reduces the number of disk I/O operations and eases the CPU load on your server.
+Cachemere is a static file fetching/caching engine which greatly reduces the number of disk I/O operations and eases the CPU load on your server.
 Cachemere caches preprocessed and/or compressed file contents and updates them when the related files change on the file system.
 By default, Cachemere also generates necessary ETag headers for client-side caching - Default headers can be modified as required before being sent.
 
