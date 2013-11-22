@@ -3,9 +3,9 @@ Cachemere
 
 A nice, smooth, cushiony layer of cache.
 
-Cachemere is a self-updating server-side caching engine which greatly reduces the number of disk i/o operations and eases the CPU load on your server.
-Cachemere caches preprocessed and/or compressed file contents and updates them when they change on the file system.
-It also generates all necessary client-side caching headers so its caching capabilities extend to the client - These headers can be modified as required before being sent.
+Cachemere is a server-side static file caching engine which greatly reduces the number of disk I/O operations and eases the CPU load on your server.
+Cachemere caches preprocessed and/or compressed file contents and updates them when the related files change on the file system.
+By default, Cachemere also generates necessary ETag headers for client-side caching - Default headers can be modified as required before being sent.
 
 To install, run:
 
@@ -15,7 +15,7 @@ npm install cachemere
 
 ==================
 
-#### Basic Example (fetches a file from disk or cache):
+#### Basic example (fetches a file from disk or cache):
 
 ```js
 var cachemere = require('cachemere');
