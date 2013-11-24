@@ -93,7 +93,7 @@ var Cache = function (options) {
 			self._cache[fullKey].time = now;
 		} else {
 			if (permanent) {
-				self._cache[fullKey] = {data: data, headers: {}, time: Date.now()};
+				self._cache[fullKey] = {data: data, headers: {}, time: Date.now(), permanent: true};
 			} else {
 				var entry = {
 					key: fullKey,
@@ -105,7 +105,7 @@ var Cache = function (options) {
 		}
 		
 		self._addKeyEncoding(key, encoding);
-		self.emit('set', key, encoding);
+		self.emit('set', key, encoding, permanent);
 		
 		self._totalSize += size;
 		
