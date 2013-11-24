@@ -42,16 +42,18 @@ These are exposed by `require('cachemere')`:
 
 ##### Events
 
+- `ready`
+	- Emitted when all pending resources have been cached.
 - `hit`
-	- Called when a resource is fetched from cache
+	- Emitted when a resource is fetched from cache
 	- **Arguments**
 		- `url`: A resource URL
 - `miss`
-	- Called when a resource misses the cache and is fetched from disk
+	- Emitted when a resource misses the cache and is fetched from disk
 	- **Arguments**
 		- `url`: A resource URL
 - `error`
-	- Called when Cachemere encounters an unexpected error
+	- Emitted when Cachemere encounters an unexpected error
 	- **Arguments**
 		- `err`: An instance of Error with an additional property 'type' which can be 'read' (cachemere.ERROR_TYPE_READ), 'compress' (cachemere.ERROR_TYPE_COMPRESS) or 'prep' (cachemere.ERROR_TYPE_PREP).
 
@@ -76,6 +78,13 @@ These are exposed by `require('cachemere')`:
 		- `Function`: A callback in the form function(err, resource) - The second argument is a cachemere.Resource object. The resource object can be manipulated and it can be output to a HTTP response. See the documentation about the Resource class below.
 		If an err is present, it will be of type Error but with an added 'type' property which gives you details about the stage of caching in which the error occurred (read, preprocess or compress).
 
+- `set`
+	- Associates a URL with some content (string or Buffer) - When fetch is called on that URL, the content specified here will be served - Cachemere will not touch the file system.
+	- **Parameters**
+		- `url`: The URL on which to serve the specified content
+		- `content`: A string or Buffer
+		- `mime`: The mime type of the content
+		
 - `setPrepProvider`
 	- Allows you to specify an optional preprocessor provider. If no prep provider is set, then Cachemere will not preprocess any of your files' contents before caching them.
 	- **Parameters**
