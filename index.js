@@ -376,7 +376,6 @@ Cachemere.prototype.fetch = function (req, callback) {
 				} else {
 					res.status = 200;
 					res.content = content;
-					
 				}
 				res.headers = headers;
 			}
