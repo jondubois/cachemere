@@ -64,7 +64,7 @@ These are exposed by `require('cachemere')`:
 		The options object can have the following properties:
 			- `compress`: (Optional) A boolean which indicates whether or not to use GZIP compression. Defaults to true.
 			- `useETags`: (Optional) A boolean which indicates whether or not to use ETags. ETag values are based on file content hash. Defaults to true.
-			- `pathConverter`: (Optional) A function which converts any given URL into a path on the file system. The default converter interprets URLs as paths relative to the application's main file.
+			- `mapper`: (Optional) A function which maps any given URL to a path on the file system. The default mapper interprets URLs as paths relative to the application's main file.
 			- `cacheFilter`: (Optional) A function which decides whether a resource is cachable. Accepts a URL as argument. Return true to allow the URL to be cached and false to not cache it.
 			- `maxSize`: (Optional) An integer which indicates the total maximum size of the server cache in bytes. Cachemere will automatically clear least-accessed resources from cache in order to meet the maxSize requirement. Defaults to 1000000000 (1GB).
 			- `maxEntrySize`: (Optional) An integer which indicates the maximum size of a single cache entry in bytes. If a file exceeds this size, it will not be cached. Defaults to 10000000 (10MB).

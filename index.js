@@ -47,7 +47,7 @@ Cachemere.prototype.init = function (options) {
 	this._options = {
 		compress: true,
 		useETags: true,
-		pathConverter: function (url) {
+		mapper: function (url) {
 			return mainDir + url;
 		}
 	};
@@ -59,7 +59,7 @@ Cachemere.prototype.init = function (options) {
 	this._cache = new Cache(this._options);
 	
 	this._useETags = this._options.useETags;
-	this._pathConverter = this._options.pathConverter;
+	this._mapper = this._options.mapper;
 	this._encoding = this._options.compress ? 'gzip' : this._cache.ENCODING_PLAIN;
 	
 	this._prepProvider = null;
@@ -101,7 +101,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._cache.on('set', function (url, encoding, permanent) {
 		if (self._watchers[url] == null && !permanent) {
-			var filePath = self._pathConverter(url);
+			var filePath = self._mapper(url);
 			fs.exists(filePath, function (exists) {
 				if (exists) {
 					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath));
@@ -350,7 +350,7 @@ Cachemere.prototype.fetch = function (req, callback) {
 		
 	} else {
 		this.emit('miss', url);
-		var filePath = this._pathConverter(url);
+		var filePath = this._mapper(url);
 		this._fetch(url, filePath, function (err, content, headers) {
 			if (err) {
 				if (err.type == self.ERROR_TYPE_READ) {
