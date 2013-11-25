@@ -93,7 +93,8 @@ These are exposed by `require('cachemere')`:
 - `setPrepProvider`
 	- Allows you to specify an optional preprocessor provider. If no prep provider is set, then Cachemere will not preprocess any of your files' contents before caching them.
 	- **Parameters**
-		- `Function`: A function which takes a URL as argument and returns a preprocessor function which will be used by Cachemere to preprocess that file's content. To skip preprocessing for a particular URL, this function should return null.
+		- `Function`: A function which takes a URL as argument and returns a preprocessor function which will be used by Cachemere to preprocess that file's content. To skip preprocessing for a particular URL, this function should return a boolean true or false.
+		Returning false signifies that the file should be streamed directly from disk. Returning true will cause Cachemere to buffer the file's contents before sending it out).
 		A preprocessor function is in the form function(resourceData) - Where resourceData is an object with a url, path and content property. The content represent's the files content as a Buffer. The preprocessor function can return either a string or a Buffer.
 		The returned value will be cached as the file's preprocessed content.
 
@@ -103,16 +104,17 @@ These are exposed by `require('cachemere')`:
 	var textFileRegex = /\.txt$/;
 
 	var textPrep = function (resource) {
-		var data = resource.content.toString('utf8').replace(/[.]/g, '!');
+		// Note that resource.content is a Buffer not a string
+		var data = resource.content.toString().replace(/[.]/g, '!');
 		return data;
 	};
 
 	cachemere.setPrepProvider(function (url) {
-		// Only preprocess files with .txt extension
+		// Only preprocess files with .txt extension, the others will be streamed from Disk (unless they are already cached).
 		if (textFileRegex.test(url)) {
 			return textPrep;
 		}
-		return null;
+		return false;
 	});
 	```
 

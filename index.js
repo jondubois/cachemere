@@ -214,19 +214,24 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 				cb(content.error);
 				self._triggerError(content.error);
 			} else {
-				var result = preprocessor(resourceData, function (err, content) {
-					content = self._valueToBuffer(content);
-					if (!(err instanceof Error)) {
-						err = new Error(err);
-					}
-					err.type = self.ERROR_TYPE_PREP;
-					
-					self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
-					cb(err, content);
-					if (err) {
-						self._triggerError(err);
-					}
-				});
+				var result;
+				if (preprocessor instanceof Function) {
+					result = preprocessor(resourceData, function (err, content) {
+						content = self._valueToBuffer(content);
+						if (!(err instanceof Error)) {
+							err = new Error(err);
+						}
+						err.type = self.ERROR_TYPE_PREP;
+						
+						self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
+						cb(err, content);
+						if (err) {
+							self._triggerError(err);
+						}
+					});
+				} else {
+					result = resourceData.content;
+				}
 				
 				if (result != null) {
 					result = self._valueToBuffer(result);
