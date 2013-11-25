@@ -15,11 +15,19 @@ var Resource = function () {
 };
 
 Resource.prototype.output = function (response) {
+	var self = this;
+	
 	response.writeHead(this.status, this.headers);
 	if (this.content && this.content.pipe) {
-		this.content.on('error', function () {
+		if (self.content.error) {
 			response.destroy();
-		});
+		} else {
+			this.content.on('end', function () {
+				if (self.content.error) {
+					response.destroy();
+				}
+			});
+		}
 		this.content.pipe(response);
 	} else {
 		response.end(this.content);
@@ -129,8 +137,8 @@ Cachemere.prototype.init = function (options) {
 	});
 };
 
-Cachemere.prototype._triggerError = function (err) {
-	this.emit('error', err);
+Cachemere.prototype._triggerNotice = function (err) {
+	this.emit('notice', err);
 };
 
 Cachemere.prototype._handleFileChange = function (url, filePath) {
@@ -168,6 +176,9 @@ Cachemere.prototype._read = function (options, cb) {
 			var err = new Error('The file at URL ' + url + ' does not exist');
 			err.type = self.ERROR_TYPE_READ;
 			cb(err);
+			if (err) {
+				self._triggerNotice(err);
+			}
 		}
 	});
 };
@@ -197,6 +208,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			
 			if (content.error) {
 				cb(content.error);
+				self._triggerNotice(content.error);
 			} else {
 				var result = preprocessor(resourceData, function (err, content) {
 					content = self._valueToBuffer(content);
@@ -207,6 +219,9 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 					
 					self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
 					cb(err, content);
+					if (err) {
+						self._triggerNotice(err);
+					}
 				});
 				
 				if (result != null) {
@@ -217,14 +232,18 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			}
 		};
 		
-		if (content instanceof Buffer) {
-			buffers.push(content);
-			prepContent();
-		} else {
+		if (content instanceof Readable) {
 			content.on('data', function (data) {
 				buffers.push(data);
 			});
+			content.on('error', function (err) {
+				content.error = err;
+			});
 			content.on('end', prepContent);
+		} else {
+			content = self._valueToBuffer(content);
+			buffers.push(content);
+			prepContent();
 		}
 	} else {
 		if (content instanceof Readable) {
@@ -233,8 +252,13 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			content.on('data', function (data) {
 				buffers.push(data);
 			});
+			content.on('error', function (err) {
+				content.error = err;
+			});
 			content.on('end', function () {
-				if (!content.error) {
+				if (content.error) {
+					self._triggerNotice(content.error);
+				} else {
 					var resBuffer = Buffer.concat(buffers);
 					self._cache.set(self._cache.ENCODING_PLAIN, url, resBuffer, options.permanent);
 				}
@@ -260,6 +284,7 @@ Cachemere.prototype._compress = function (options, content, cb) {
 				}
 				err.type = self.ERROR_TYPE_COMPRESS;
 				cb(err);
+				self._triggerNotice(err);
 			} else {
 				self._cache.set(self._encoding, url, result, options.permanent);
 				cb(null, result);
@@ -269,13 +294,15 @@ Cachemere.prototype._compress = function (options, content, cb) {
 		var buffers = [];
 		var compressorStream = zlib.createGzip();
 		
+		compressorStream.error = content.error;
+		
 		compressorStream.on('data', function (data) {
 			buffers.push(data);
 		});
 		
 		compressorStream.on('error', function (err) {
 			compressorStream.error = err;
-			self._triggerError(err);
+			self._triggerNotice(err);
 		});
 		
 		compressorStream.on('end', function () {
@@ -286,9 +313,8 @@ Cachemere.prototype._compress = function (options, content, cb) {
 		});
 		
 		content.on('error', function (err) {
-			content.error = err;
+			compressorStream.error = err;
 			compressorStream.end();
-			compressorStream.emit('error', err);
 		});
 		
 		content.pipe(compressorStream);
