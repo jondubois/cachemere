@@ -141,6 +141,10 @@ Cachemere.prototype._triggerNotice = function (err) {
 	this.emit('notice', err);
 };
 
+Cachemere.prototype._triggerError = function (err) {
+	this.emit('error', err);
+};
+
 Cachemere.prototype._handleFileChange = function (url, filePath) {
 	var options = {
 		url: url,
@@ -208,7 +212,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			
 			if (content.error) {
 				cb(content.error);
-				self._triggerNotice(content.error);
+				self._triggerError(content.error);
 			} else {
 				var result = preprocessor(resourceData, function (err, content) {
 					content = self._valueToBuffer(content);
@@ -220,7 +224,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 					self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
 					cb(err, content);
 					if (err) {
-						self._triggerNotice(err);
+						self._triggerError(err);
 					}
 				});
 				
@@ -257,7 +261,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			});
 			content.on('end', function () {
 				if (content.error) {
-					self._triggerNotice(content.error);
+					self._triggerError(content.error);
 				} else {
 					var resBuffer = Buffer.concat(buffers);
 					self._cache.set(self._cache.ENCODING_PLAIN, url, resBuffer, options.permanent);
@@ -284,7 +288,7 @@ Cachemere.prototype._compress = function (options, content, cb) {
 				}
 				err.type = self.ERROR_TYPE_COMPRESS;
 				cb(err);
-				self._triggerNotice(err);
+				self._triggerError(err);
 			} else {
 				self._cache.set(self._encoding, url, result, options.permanent);
 				cb(null, result);
@@ -302,7 +306,7 @@ Cachemere.prototype._compress = function (options, content, cb) {
 		
 		compressorStream.on('error', function (err) {
 			compressorStream.error = err;
-			self._triggerNotice(err);
+			self._triggerError(err);
 		});
 		
 		compressorStream.on('end', function () {

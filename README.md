@@ -53,6 +53,10 @@ These are exposed by `require('cachemere')`:
 	- **Arguments**
 		- `url`: A resource URL
 - `notice`
+	- Emitted when Cachemere encounters a notice error - These errors are very low importance - For example, fetching a file which does not exist will cause a notice to be emitted.
+	- **Arguments**
+		- `err`: An instance of Error with an additional property 'type' which can be 'read' (cachemere.ERROR_TYPE_READ), 'compress' (cachemere.ERROR_TYPE_COMPRESS) or 'prep' (cachemere.ERROR_TYPE_PREP).
+- `error`
 	- Emitted when Cachemere encounters an error - These errors don't need to be handled explicitly since Cachemere handles them internally - This event is mostly for logging purposes.
 	- **Arguments**
 		- `err`: An instance of Error with an additional property 'type' which can be 'read' (cachemere.ERROR_TYPE_READ), 'compress' (cachemere.ERROR_TYPE_COMPRESS) or 'prep' (cachemere.ERROR_TYPE_PREP).
