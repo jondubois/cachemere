@@ -47,6 +47,7 @@ Cachemere.prototype.init = function (options) {
 	this._options = {
 		compress: true,
 		useETags: true,
+		ignoreQueryString: true,
 		mapper: function (url) {
 			return mainDir + url;
 		}
@@ -60,6 +61,7 @@ Cachemere.prototype.init = function (options) {
 	this.ready = true;
 	
 	this._gzipRegex = /\bgzip\b/;
+	this._urlBodyRegex = /^[^\#\?]+/;
 	
 	this._useETags = this._options.useETags;
 	this._mapper = this._options.mapper;
@@ -141,6 +143,16 @@ Cachemere.prototype._handleFileChange = function (url, filePath) {
 	this._fetch(options);
 };
 
+Cachemere.prototype._valueToBuffer = function (value) {
+	if (!(value instanceof Buffer)) {
+		if (typeof value != 'string') {
+			value = value.toString();
+		}
+		value = new Buffer(value);
+	}
+	return value;
+};
+
 Cachemere.prototype._read = function (options, cb) {
 	var self = this;
 	
@@ -148,9 +160,8 @@ Cachemere.prototype._read = function (options, cb) {
 	var filePath = options.path;
 	
 	fs.exists(filePath, function (exists) {
-		var stream = null;
 		if (exists) {
-			stream = fs.createReadStream(filePath);
+			var stream = fs.createReadStream(filePath);
 			cb(null, stream);
 		} else {
 			self._cache.clear(null, url);
@@ -188,12 +199,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 				cb(content.error);
 			} else {
 				var result = preprocessor(resourceData, function (err, content) {
-					if (!(content instanceof Buffer)) {
-						if (typeof content != 'string') {
-							content = content.toString();
-						}
-						content = new Buffer(content);
-					}
+					content = self._valueToBuffer(content);
 					if (!(err instanceof Error)) {
 						err = new Error(err);
 					}
@@ -204,12 +210,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 				});
 				
 				if (result != null) {
-					if (!(result instanceof Buffer)) {
-						if (typeof result != 'string') {
-							result = result.toString();
-						}
-						result = new Buffer(result);
-					}
+					result = self._valueToBuffer(result);
 					self._cache.set(self._cache.ENCODING_PLAIN, url, result, options.permanent);
 					cb(null, result);
 				}
@@ -226,7 +227,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			content.on('end', prepContent);
 		}
 	} else {
-		if (!self._options.compress) {
+		if (content instanceof Readable) {
 			var buffers = [];
 			
 			content.on('data', function (data) {
@@ -238,6 +239,9 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 					self._cache.set(self._cache.ENCODING_PLAIN, url, resBuffer, options.permanent);
 				}
 			});
+		} else {
+			content = self._valueToBuffer(content);
+			self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
 		}
 		cb(null, content);
 	}
@@ -301,13 +305,13 @@ Cachemere.prototype._addHeaders = function (options, content, cb) {
 Cachemere.prototype._fetch = function (options, callback) {
 	var self = this;
 	
-	this._setPendingCache(options.url);
+	this._setPendingCache(options.url, options.encoding);
 	
 	if (options.mime == null) {
 		options.mime = mime.lookup(options.path || options.url);
 	}
 
-	if (self._cache.has(self._cache.ENCODING_PLAIN, options.url) && !options.forceRefresh) {
+	if (self._cache.has(self._cache.ENCODING_PLAIN, options.url) && !options.forceRefresh && false) {
 		var tasks = [
 			function (options, cb) {
 				var content = self._cache.get(self._cache.ENCODING_PLAIN, options.url);
@@ -327,17 +331,29 @@ Cachemere.prototype._fetch = function (options, callback) {
 	
 	tasks.push(this._addHeaders.bind(this, options));
 	
-	async.waterfall(tasks, function (err, content, headers) {
-		self._clearPendingCache(options.url);
+	async.waterfall(tasks, function (err, content, headers) {		
+		self._clearPendingCache(options.url, options.encoding);
 		callback && callback(err, content, headers);
 	});
+};
+
+Cachemere.prototype._simplifyURL = function (url) {
+	if (this._options.ignoreQueryString) {
+		var matches = url.match(this._urlBodyRegex);
+		if (matches) {
+			url = matches[0];
+		} else {
+			url = '';
+		}
+	}
+	return url;
 };
 
 Cachemere.prototype.fetch = function (req, callback) {
 	var self = this;
 	
-	var req = arguments[0];
-	var url = req.url;
+	var url = this._simplifyURL(req.url);
+	
 	var reqHeaders = req.headers || {};
 	var ifNoneMatch = reqHeaders['if-none-match'];
 	var acceptEncodings = req.headers['accept-encoding'] || '';
@@ -348,6 +364,7 @@ Cachemere.prototype.fetch = function (req, callback) {
 	} else {
 		encoding = this._cache.ENCODING_PLAIN;
 	}
+	encoding = this._encoding;
 	
 	var res = new Resource();
 	
@@ -358,7 +375,8 @@ Cachemere.prototype.fetch = function (req, callback) {
 		this.emit('hit', url, encoding);
 		res.hit = true;
 		res.content = this._cache.get(encoding, url);
-		res.modified = this.getModifiedTime(url);
+		
+		res.modified = this.getModifiedTime(url, encoding);
 		res.type = this.RESOURCE_TYPE_BUFFER;
 		
 		res.headers = this._cache.getHeaders(encoding, url);
@@ -391,7 +409,7 @@ Cachemere.prototype.fetch = function (req, callback) {
 					'Content-Type': 'text/html'
 				};
 			} else {
-				res.modified = self.getModifiedTime(url);
+				res.modified = self.getModifiedTime(url, encoding);
 				res.type = self.RESOURCE_TYPE_STREAM;
 				
 				if (ifNoneMatch != null && ifNoneMatch == headers['ETag']) {
@@ -408,17 +426,29 @@ Cachemere.prototype.fetch = function (req, callback) {
 	}
 };
 
-Cachemere.prototype.getModifiedTime = function (url) {
-	return this._cache.getModifiedTime(this._encoding, url);
+Cachemere.prototype.getModifiedTime = function (url, encoding) {
+	url = this._simplifyURL(url);
+	if (!encoding) {
+		encoding = this._encoding;
+	}
+	return this._cache.getModifiedTime(encoding, url);
 };
 
-Cachemere.prototype._setPendingCache = function (url) {
+Cachemere.prototype._setPendingCache = function (url, encoding) {
+	if (!encoding) {
+		encoding = this._encoding;
+	}
+	var key = encoding + this._cache.ENCODING_SEPARATOR + url;
 	this.ready = false;
-	this._pendingCache[url] = true;
+	this._pendingCache[key] = true;
 };
 
-Cachemere.prototype._clearPendingCache = function (url) {
-	delete this._pendingCache[url];
+Cachemere.prototype._clearPendingCache = function (url, encoding) {
+	if (!encoding) {
+		encoding = this._encoding;
+	}
+	var key = encoding + this._cache.ENCODING_SEPARATOR + url;
+	delete this._pendingCache[key];
 	var isEmpty = true;
 	for (var i in this._pendingCache) {
 		isEmpty = false;
@@ -442,19 +472,16 @@ Cachemere.prototype.on = function (event, listener) {
 Cachemere.prototype.set = function (url, content, mime, callback) {
 	var self = this;
 	
-	if (!(content instanceof Buffer)) {
-		if (typeof content != 'string') {
-			content = content.toString();
-		}
-		content = new Buffer(content);
-	}
+	url = this._simplifyURL(url);
+	content = this._valueToBuffer(content);
 
-	this._setPendingCache(url);
+	this._setPendingCache(url, this._encoding);
 	
 	var options = {
 		url: url,
 		mime: mime,
-		permanent: true
+		permanent: true,
+		encoding: this._encoding
 	};
 	
 	var tasks = [
@@ -468,16 +495,18 @@ Cachemere.prototype.set = function (url, content, mime, callback) {
 	tasks.push(this._addHeaders.bind(this, options));
 	
 	async.waterfall(tasks, function (err, content) {
-		self._clearPendingCache(url);
+		self._clearPendingCache(url, self._encoding);
 		callback && callback(err, content);
 	});
 };
 
 Cachemere.prototype.clear = function (url) {
+	url = this._simplifyURL(url);
 	return this._cache.clear(null, url);
 };
 
 Cachemere.prototype.has = function (url) {
+	url = this._simplifyURL(url);
 	return this._cache.has(this._encoding, url);
 };
 

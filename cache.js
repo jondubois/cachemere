@@ -25,7 +25,6 @@ var Cache = function (options) {
 	self._cacheFilter = options.cacheFilter;
 	self._maxSize = options.maxSize || 1000000000;
 	self._maxEntrySize = options.maxEntrySize || 10000000;
-	self._minCacheLifeMillis = options.minCacheLifeMillis || 0;
 	
 	self._getFullKey = function (encoding, key) {
 		return encoding + self.ENCODING_SEPARATOR + key;
@@ -69,26 +68,21 @@ var Cache = function (options) {
 	};
 	
 	self.set = function (encoding, key, data, permanent) {
-		if (typeof data == 'string') {
+		if (!(data instanceof Buffer)) {
+			if (typeof data != 'string') {
+				data = data.toString();
+			}
 			data = new Buffer(data);
 		}
 		
-		if (!(data instanceof Buffer)) {
-			return false;
-		}
-		
 		var size = data.length;
-		if (size > self._maxEntrySize || (self._cacheFilter && !self._cacheFilter(key))) {
+		if ((size > self._maxEntrySize || (self._cacheFilter && !self._cacheFilter(key))) && !permanent) {
 			return false;
 		}
 		
 		var fullKey = self._getFullKey(encoding, key);
 		if (self._cache.hasOwnProperty(fullKey)) {
-			var lastCacheTime = self._cache[fullKey].time;
 			var now = Date.now();
-			if (now - lastCacheTime < self._minCacheLifeMillis) {
-				return false;
-			}
 			self._cache[fullKey].data = data;
 			self._cache[fullKey].time = now;
 		} else {
