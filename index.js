@@ -77,6 +77,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._prepProvider = null;
 	this._pendingCache = {};
+	this._pendingPrepCallbacks = {};
 	
 	this._headerGen = function (options) {
 		var headers = {
@@ -219,20 +220,36 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 			} else {
 				var result;
 				if (preprocessor instanceof Function) {
-					result = preprocessor(resourceData, function (err, content) {
-						if (err == null) {
-							content = self._valueToBuffer(content);
-							self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
-							cb(null, content);
-						} else {
-							if (!(err instanceof Error)) {
-								err = new Error(err);
+					if (self._pendingPrepCallbacks[url] == null) {
+						self._pendingPrepCallbacks[url] = [cb];
+						result = preprocessor(resourceData, function (err, content) {
+							var pendingCallbacks = self._pendingPrepCallbacks[url];
+							
+							if (err == null) {
+								content = self._valueToBuffer(content);
+								self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
+								
+								for (var i in pendingCallbacks) {
+									pendingCallbacks[i](null, content);
+								}
+							} else {
+								if (!(err instanceof Error)) {
+									err = new Error(err);
+								}
+								err.type = self.ERROR_TYPE_PREP;
+								for (var i in pendingCallbacks) {
+									pendingCallbacks[i](err);
+								}
+								self._triggerError(err);
 							}
-							err.type = self.ERROR_TYPE_PREP;
-							cb(err);
-							self._triggerError(err);
+							delete self._pendingPrepCallbacks[url];
+						});
+						if (result != null) {
+							delete self._pendingPrepCallbacks[url];
 						}
-					});
+					} else {
+						self._pendingPrepCallbacks[url].push(cb);
+					}
 				} else {
 					result = resourceData.content;
 				}
