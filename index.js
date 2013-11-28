@@ -156,6 +156,9 @@ Cachemere.prototype._handleFileChange = function (url, filePath) {
 };
 
 Cachemere.prototype._valueToBuffer = function (value) {
+	if (value == null) {
+		return null;
+	}
 	if (!(value instanceof Buffer)) {
 		if (typeof value != 'string') {
 			value = value.toString();
@@ -217,15 +220,16 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 				var result;
 				if (preprocessor instanceof Function) {
 					result = preprocessor(resourceData, function (err, content) {
-						content = self._valueToBuffer(content);
-						if (!(err instanceof Error)) {
-							err = new Error(err);
-						}
-						err.type = self.ERROR_TYPE_PREP;
-						
-						self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
-						cb(err, content);
-						if (err) {
+						if (err == null) {
+							content = self._valueToBuffer(content);
+							self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
+							cb(null, content);
+						} else {
+							if (!(err instanceof Error)) {
+								err = new Error(err);
+							}
+							err.type = self.ERROR_TYPE_PREP;
+							cb(err);
 							self._triggerError(err);
 						}
 					});
