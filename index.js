@@ -416,10 +416,7 @@ Cachemere.prototype.fetch = function (req, callback) {
 
 Cachemere.prototype.getModifiedTime = function (url, encoding) {
 	url = this._simplifyURL(url);
-	if (!encoding) {
-		encoding = this._encoding;
-	}
-	return this._cache.getModifiedTime(encoding, url);
+	return this._cache.getModifiedTime(encoding || this._encoding, url);
 };
 
 Cachemere.prototype._setPendingCache = function (url) {
@@ -480,14 +477,14 @@ Cachemere.prototype.set = function (url, content, mime, callback) {
 	});
 };
 
-Cachemere.prototype.clear = function (url) {
+Cachemere.prototype.clear = function (url, encoding) {
 	url = this._simplifyURL(url);
-	return this._cache.clear(null, url);
+	return this._cache.clear(encoding, url);
 };
 
-Cachemere.prototype.has = function (url) {
+Cachemere.prototype.has = function (url, encoding) {
 	url = this._simplifyURL(url);
-	return this._cache.has(this._encoding, url);
+	return this._cache.has(encoding || this._encoding, url);
 };
 
 Cachemere.prototype.reset = function () {
