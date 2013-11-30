@@ -24,6 +24,9 @@ var Cachemere = function () {
 	this.ERROR_TYPE_COMPRESS = 'compress';
 	this.ERROR_TYPE_PREP = 'prep';
 	
+	this.ENCODING_PLAIN = Cache.ENCODING_PLAIN;
+	this.ENCODING_GZIP = 'gzip';
+	
 	this.init();
 };
 
@@ -48,6 +51,7 @@ Cachemere.prototype.init = function (options) {
 	}
 	
 	this._cache = new Cache(this._options);
+	
 	this.ready = true;
 	
 	this._gzipRegex = /\bgzip\b/;
@@ -55,7 +59,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._useETags = this._options.useETags;
 	this._mapper = this._options.mapper;
-	this._encoding = this._options.compress ? 'gzip' : this._cache.ENCODING_PLAIN;
+	this._encoding = this._options.compress ? this.ENCODING_GZIP : this._cache.ENCODING_PLAIN;
 	
 	this._prepProvider = null;
 	this._pendingCache = {};
