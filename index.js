@@ -59,7 +59,7 @@ Cachemere.prototype.init = function (options) {
 	
 	this._useETags = this._options.useETags;
 	this._mapper = this._options.mapper;
-	this._encoding = this._options.compress ? this.ENCODING_GZIP : this._cache.ENCODING_PLAIN;
+	this._encoding = this._options.compress ? this.ENCODING_GZIP : this.ENCODING_PLAIN;
 	
 	this._prepProvider = null;
 	this._pendingCache = {};
@@ -72,22 +72,21 @@ Cachemere.prototype.init = function (options) {
 		};
 		
 		if (self._useETags) {
-			var eTag = self._cache.getHeader(options.encoding, options.url, 'ETag');
+			var eTag = self._cache.getHeader(self.ENCODING_PLAIN, options.url, 'ETag');
 			if (eTag != null) {
 				headers['ETag'] = eTag;
 			}
 		}
-		
-		if (self._options.compress && options.encoding != self._cache.ENCODING_PLAIN) {
+		if (self._options.compress && options.encoding != self.ENCODING_PLAIN) {
 			headers['Content-Encoding'] = options.encoding;
 		}
 		
 		return headers;
 	};
 	
-	this._updateETag = function (url, encoding) {
-		var headers = self._cache.getHeaders(encoding, url);
-		var content = self._cache.get(encoding, url);
+	this._updateETag = function (url) {
+		var headers = self._cache.getHeaders(self.ENCODING_PLAIN, url);
+		var content = self._cache.get(self.ENCODING_PLAIN, url);
 		if (content == null) {
 			headers['ETag'] = '-1';
 		} else {
@@ -112,8 +111,8 @@ Cachemere.prototype.init = function (options) {
 				}
 			});
 		}
-		if (self._useETags) {
-			self._updateETag(url, encoding);
+		if (self._useETags && encoding == self.ENCODING_PLAIN) {
+			self._updateETag(url);
 		}
 	});
 	
@@ -199,7 +198,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
             result = preprocessor(resourceData, function (err, prepContent) {                    
                 if (err == null) {
                     prepContent = self._valueToBuffer(prepContent);
-                    self._cache.set(self._cache.ENCODING_PLAIN, url, prepContent, options.permanent);
+                    self._cache.set(self.ENCODING_PLAIN, url, prepContent, options.permanent);
                     
                     cb(null, prepContent);
                 } else {
@@ -217,11 +216,11 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
         
         if (result != null) {
             result = self._valueToBuffer(result);
-            self._cache.set(self._cache.ENCODING_PLAIN, url, result, options.permanent);
+            self._cache.set(self.ENCODING_PLAIN, url, result, options.permanent);
             cb(null, result);
         }
 	} else {
-        self._cache.set(self._cache.ENCODING_PLAIN, url, content, options.permanent);
+        self._cache.set(self.ENCODING_PLAIN, url, content, options.permanent);
 		cb(null, content);
 	}
 };
@@ -270,10 +269,10 @@ Cachemere.prototype._fetch = function (options, callback) {
             options.mime = mime.lookup(options.path || url);
         }
 
-        if (self._cache.has(self._cache.ENCODING_PLAIN, url) && !options.forceRefresh) {
+        if (self._cache.has(self.ENCODING_PLAIN, url) && !options.forceRefresh) {
             var tasks = [
                 function (options, cb) {
-                    var content = self._cache.get(self._cache.ENCODING_PLAIN, url);
+                    var content = self._cache.get(self.ENCODING_PLAIN, url);
                     cb(null, content);
                 }
             ];
@@ -311,7 +310,7 @@ Cachemere.prototype._fetch = function (options, callback) {
                 for (var i in pendingRequests) {
                     cb = pendingRequests[i].callback;
                     encoding = pendingRequests[i].options.encoding;
-                    if (encoding == self._cache.ENCODING_PLAIN) {
+                    if (encoding == self.ENCODING_PLAIN) {
                         content = self._cache.get(encoding, url);
                         headers = self._cache.getHeaders(encoding, url);
                         cb && cb(null, content, headers);
@@ -358,7 +357,7 @@ Cachemere.prototype.fetch = function (req, callback) {
 	if (this._gzipRegex.test(acceptEncodings)) {
 		encoding = this._encoding;
 	} else {
-		encoding = this._cache.ENCODING_PLAIN;
+		encoding = this.ENCODING_PLAIN;
 	}
 	encoding = this._encoding;
 	
