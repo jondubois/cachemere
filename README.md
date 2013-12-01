@@ -129,7 +129,7 @@ These are exposed by `require('cachemere')`:
 		var data = resource.content.toString().replace(/[.]/g, '!');
 		
 		/*
-			If an error occurred, you should can pass it as the first argument to the 
+			If an error occurred, you can pass it as the first argument to the 
 			callback - In this case, Cachemere will serve an error code along 
 			with the error message to the client.
 		*/
