@@ -3,4 +3,10 @@ Feel free to add new items to this list.
 - Add a middleware function in the form middleware(err, req, res, next) 
 so that Cachemere can be directly used as express middleware.
 
+- Benchmark cachemere performance. It would be interesting to see how many requests
+it can handle per second on standard hardware.
+Add results to the end of the README file.
+
 - Add more examples to README.
+
+- Add some tests (create a new tests/ directory).
