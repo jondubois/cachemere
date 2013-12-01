@@ -1,0 +1,6 @@
+Feel free to add new items to this list.
+
+- Add a middleware function in the form middleware(err, req, res, next) 
+so that Cachemere can be directly used as express middleware.
+
+- Add more examples to README.
