@@ -117,7 +117,7 @@ These are exposed by `require('cachemere')`:
 		if (textFileRegex.test(url)) {
 			return textPrep;
 		}
-		return false;
+		return null;
 	});
 	```
 	
