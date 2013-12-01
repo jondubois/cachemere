@@ -96,8 +96,10 @@ These are exposed by `require('cachemere')`:
 	- Allows you to specify an optional preprocessor provider. If no prep provider is set, then Cachemere will not preprocess any of your files' contents before caching them.
 	- **Parameters**
 		- `Function`: A function which takes a URL as argument and returns a preprocessor function which will be used by Cachemere to preprocess that file's content. To skip preprocessing for a particular URL, this function should return null.
-		A preprocessor function is in the form function(resourceData) - Where resourceData is an object with a url, path and content property. The content represent's the files content as a Buffer. The preprocessor function can return either a string or a Buffer.
-		The returned value will be cached as the file's preprocessed content.
+		A preprocessor function is in the form function(resourceData, callback) - Where resourceData is an object with a url, path and content property.
+		The content represent's the files content as a Buffer. The preprocessor function can send back its output (string or Buffer) synchronously or asynchronously - 
+		To return the result synchronously, just use the return statement, otherwise, for asynchronous processing, you can pass it to the callback(err, content) function - Just chose one OR the other NOT BOTH.
+		The returned/passed value will be cached as the file's preprocessed content.
 
 	**Example:**
 
@@ -117,6 +119,21 @@ These are exposed by `require('cachemere')`:
 		}
 		return false;
 	});
+	```
+	
+	**Async textPrep:**
+
+	```js
+	var textPrep = function (resource, callback) {
+		// Note that resource.content is a Buffer not a string
+		var data = resource.content.toString().replace(/[.]/g, '!');
+		
+		/*
+			If an error occurred, you should can pass it as the first argument to the callback - In this case,
+			Cachemere will serve an error code along with the error message to the client.
+		*/
+		callback(null, data);
+	};
 	```
 
 - `getPrepProvider`
