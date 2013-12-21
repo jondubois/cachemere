@@ -86,7 +86,18 @@ These are exposed by `require('cachemere')`:
 		If an err is present, it will be of type Error but with an added 'type' property which gives you details about the stage of caching in which the error occurred (read, preprocess or compress).
 
 - `set`
-	- Associates a URL with some content (string or Buffer) - When fetch is called on that URL, the content specified here will be served - Cachemere will not touch the file system.
+	- Associates a URL with some content (string or Buffer) - When fetch is called on that URL, the content specified here will be served. This method can be used to
+	override default file content.
+	- **Parameters**
+		- `options`: An object which can have the following fields:
+			- `url`: The URL on which to serve the specified content
+			- `content`: A string or Buffer
+			- `mime`: The mime type of the content
+			- `permanent`: Whether or not this content is permanent or should be overriden with new content when the related file changes on the file system (assuming that there is such a file).
+			- `preprocessed`: An optional boolean - If this is true, the supplied content will not be preprocessed again before being cached.
+		
+- `setRaw`
+	- Associates a URL with some raw content (string or Buffer) - When fetch is called on that URL, the content specified here will be served - Cachemere will not touch the file system.
 	- **Parameters**
 		- `url`: The URL on which to serve the specified content
 		- `content`: A string or Buffer
@@ -96,10 +107,8 @@ These are exposed by `require('cachemere')`:
 	- Allows you to specify an optional preprocessor provider. If no prep provider is set, then Cachemere will not preprocess any of your files' contents before caching them.
 	- **Parameters**
 		- `Function`: A function which takes a URL as argument and returns a preprocessor function which will be used by Cachemere to preprocess that file's content. To skip preprocessing for a particular URL, this function should return null.
-		A preprocessor function is in the form function(resourceData, callback) - Where resourceData is an object with a url, path and content property.
-		The content represent's the files content as a Buffer. The preprocessor function can send back its output (string or Buffer) synchronously or asynchronously - 
-		To return the result synchronously, just use the return statement, otherwise, for asynchronous processing, you can pass it to the callback(err, content) function - Just chose one OR the other NOT BOTH.
-		The returned/passed value will be cached as the file's preprocessed content.
+		A preprocessor function is in the form function(resourceData) - Where resourceData is an object with a url, path and content property. The content represent's the files content as a Buffer. The preprocessor function can return either a string or a Buffer.
+		The returned value will be cached as the file's preprocessed content.
 
 	**Example:**
 
@@ -117,24 +126,8 @@ These are exposed by `require('cachemere')`:
 		if (textFileRegex.test(url)) {
 			return textPrep;
 		}
-		return null;
+		return false;
 	});
-	```
-	
-	**Async textPrep:**
-
-	```js
-	var textPrep = function (resource, callback) {
-		// Note that resource.content is a Buffer not a string
-		var data = resource.content.toString().replace(/[.]/g, '!');
-		
-		/*
-			If an error occurred, you can pass it as the first argument to the 
-			callback - In this case, Cachemere will serve an error code along 
-			with the error message to the client.
-		*/
-		callback(null, data);
-	};
 	```
 
 - `getPrepProvider`
