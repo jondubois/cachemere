@@ -104,13 +104,15 @@ Cachemere.prototype.init = function (options) {
 	};
 	
 	this._watchers = {};
+	this._depWatchers = {};
+	this._deps = {};
 	
 	this._cache.on('set', function (url, encoding, permanent) {
 		if (self._watchers[url] == null && !permanent) {
 			var filePath = self._mapper(url);
 			fs.exists(filePath, function (exists) {
 				if (exists) {
-					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath));
+					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath, false));
 				}
 			});
 		}
@@ -135,7 +137,7 @@ Cachemere.prototype._triggerError = function (err) {
 	this.emit('error', err);
 };
 
-Cachemere.prototype._handleFileChange = function (url, filePath) {
+Cachemere.prototype._handleFileChange = function (url, filePath, checkExists) {
 	var self = this;
 	
 	var options = {
@@ -149,8 +151,17 @@ Cachemere.prototype._handleFileChange = function (url, filePath) {
 	}
 	
 	this._pendingFileChanges[url] = setTimeout(function () {
-		self.set(options);
-		delete self._pendingFileChanges[url];
+		if (checkExists) {
+			fs.exists(filePath, function (exists) {
+				if (exists) {
+					self.set(options);
+				}
+				delete self._pendingFileChanges[url];
+			});
+		} else {
+			self.set(options);
+			delete self._pendingFileChanges[url];
+		}
 	}, this._options.delayFileUpdate);
 };
 
@@ -554,6 +565,34 @@ Cachemere.prototype.has = function (url, encoding) {
 
 Cachemere.prototype.reset = function () {
 	return this._cache.reset();
+};
+
+Cachemere.prototype.setDeps = function (url, deps) {
+	if (this._depWatchers[url] != null) {
+		for (var i in this._depWatchers[url]) {
+			this._depWatchers[url][i].close();
+		}
+		delete this._depWatchers[url];
+	}
+	
+	if (deps) {
+		var filePath = this._mapper(url);
+		this._depWatchers[url] = [];
+		for (var j in deps) {
+			this._depWatchers[url].push(fs.watch(deps[j], this._handleFileChange.bind(this, url, filePath, true)));
+		}
+		this._deps[url] = deps;
+	} else if (this._deps[url]) {
+		delete this._deps[url];
+	}
+};
+
+Cachemere.prototype.clearDeps = function (url) {
+	this.setDeps(url, null);
+};
+
+Cachemere.prototype.getDeps = function (url) {
+	return this._deps[url];
 };
 
 Cachemere.prototype.setPrepProvider = function (prepProvider) {

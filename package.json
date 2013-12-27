@@ -1,7 +1,7 @@
 {
   "name": "cachemere",
   "description": "A nice, smooth, cushiony layer of cache",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "author": {
     "name": "JF Gros-Dubois",
     "email": "flashthink@gmail.com"
@@ -36,7 +36,5 @@
   "readmeFilename": "README.md",
   "bugs": {
     "url": "https://github.com/topcloud/cachemere/issues"
-  },
-  "_id": "cachemere@0.9.4",
-  "_from": "cachemere@0.9.4"
+  }
 }
