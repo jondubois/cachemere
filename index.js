@@ -63,7 +63,7 @@ Cachemere.prototype.init = function (options) {
 	this._encoding = this._options.compress ? this.ENCODING_GZIP : this.ENCODING_PLAIN;
 	
 	this._prepProvider = null;
-	this._pendingCache = {};
+	this._pendingProcessing = {};
 	
 	this._pendingFileChanges = {};
 	this._pendingRequests = {};
@@ -291,13 +291,13 @@ Cachemere.prototype._simplifyURL = function (url) {
 
 Cachemere.prototype._processUpdates = function (url) {
 	var self = this;
-	
+
 	var updateData = this._pendingUpdates[url].shift();
 	var options = updateData.options;
 	var callback = updateData.callback;
 	var content = options.content;
 	
-	this._setPendingCache(url);
+	this._setPendingProcessing(url);
 	
 	options.encoding = this._encoding;
 	
@@ -337,7 +337,7 @@ Cachemere.prototype._processUpdates = function (url) {
 			self._processUpdates(url);
 		} else {
 			delete self._pendingUpdates[url];
-			self._clearPendingCache(url);
+			self._clearPendingProcessing(url);
 		}
 	});
 };
@@ -353,7 +353,7 @@ Cachemere.prototype.set = function (options, callback) {
 	updateOptions.url = this._simplifyURL(updateOptions.url);
 	updateOptions.content = this._valueToBuffer(updateOptions.content);
 	
-	if (updateOptions.content != null && !updateOptions.disableServeRaw) {
+	if (updateOptions.content != null && !updateOptions.disableServeRaw && false) {
 		this._cache.set(this.ENCODING_PLAIN, updateOptions.url, updateOptions.content, updateOptions.permanent);
 	}
 
@@ -394,7 +394,7 @@ Cachemere.prototype._fetch = function (options, callback) {
 			}];
 		}
 		
-		this._setPendingCache(url);
+		this._setPendingProcessing(url);
 		
 		if (options.mime == null) {
 			options.mime = mime.lookup(options.path || url);
@@ -443,7 +443,7 @@ Cachemere.prototype._fetch = function (options, callback) {
 				}
 			}
 			delete self._pendingRequests[url];
-			self._clearPendingCache(url);
+			self._clearPendingProcessing(url);
 		});
 	} else if (callback) {
 		this._pendingRequests[url].push({
@@ -531,15 +531,24 @@ Cachemere.prototype.getModifiedTime = function (url, encoding) {
 	return this._cache.getModifiedTime(encoding || this._encoding, url);
 };
 
-Cachemere.prototype._setPendingCache = function (url) {
+Cachemere.prototype._setPendingProcessing = function (url) {
 	this.ready = false;
-	this._pendingCache[url] = true;
+	if (this._pendingProcessing[url] == null) {
+		this._pendingProcessing[url] = 0;
+	}
+	this._pendingProcessing[url]++;
 };
 
-Cachemere.prototype._clearPendingCache = function (url) {
-	delete this._pendingCache[url];
+Cachemere.prototype._clearPendingProcessing = function (url) {
+	if (this._pendingProcessing[url] != null) {
+		this._pendingProcessing[url]--;
+	}
+	if (this._pendingProcessing[url] < 1) {
+		delete this._pendingProcessing[url];
+	}
+	
 	var isEmpty = true;
-	for (var i in this._pendingCache) {
+	for (var i in this._pendingProcessing) {
 		isEmpty = false;
 		break;
 	}
