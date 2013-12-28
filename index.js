@@ -352,6 +352,10 @@ Cachemere.prototype.set = function (options, callback) {
 	
 	updateOptions.url = this._simplifyURL(updateOptions.url);
 	updateOptions.content = this._valueToBuffer(updateOptions.content);
+	
+	if (updateOptions.content != null && !updateOptions.disableServeRaw) {
+		this._cache.set(this.ENCODING_PLAIN, updateOptions.url, updateOptions.content, updateOptions.permanent);
+	}
 
 	if (this._pendingUpdates[updateOptions.url] == null) {
 		this._pendingUpdates[updateOptions.url] = [{
@@ -367,11 +371,12 @@ Cachemere.prototype.set = function (options, callback) {
 	}
 };
 
-Cachemere.prototype.setRaw = function (url, content, mime, callback) {
+Cachemere.prototype.setRaw = function (url, content, mime, disableServeRaw, callback) {
 	var options = {
 		url: url,
 		content: content,
 		mime: mime,
+		disableServeRaw: disableServeRaw,
 		permanent: true
 	};
 	this.set(options, callback);
@@ -397,7 +402,7 @@ Cachemere.prototype._fetch = function (options, callback) {
 
 		if (self._cache.has(self.ENCODING_PLAIN, url)) {
 			var tasks = [
-				function (options, cb) {
+				function (cb) {
 					var content = self._cache.get(self.ENCODING_PLAIN, url);
 					cb(null, content);
 				}
