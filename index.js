@@ -183,7 +183,7 @@ Cachemere.prototype._read = function (options, cb) {
 	
 	var url = options.url;
 	
-	if (options.path == null) {
+	if (options.path === undefined) {
 		options.path = this._mapper(url);
 	};
 	
@@ -301,6 +301,9 @@ Cachemere.prototype._processUpdates = function (url) {
 	
 	options.encoding = this._encoding;
 	
+	if (options.path == null) {
+		options.path = this._mapper(url);
+	}
 	if (options.mime == null) {
 		options.mime = mime.lookup(options.path || url);
 	}
@@ -396,6 +399,9 @@ Cachemere.prototype._fetch = function (options, callback) {
 		
 		this._setPendingProcessing(url);
 		
+		if (options.path == null) {
+			options.path = this._mapper(url);
+		}
 		if (options.mime == null) {
 			options.mime = mime.lookup(options.path || url);
 		}
@@ -422,8 +428,8 @@ Cachemere.prototype._fetch = function (options, callback) {
 		
 		async.waterfall(tasks, function (err, content, headers) {
 			var pendingRequests = self._pendingRequests[url];
-			
 			var encoding, cb;
+			
 			if (err) {
 				for (var i in pendingRequests) {
 					cb = pendingRequests[i].callback;
