@@ -144,10 +144,12 @@ These are exposed by `require('cachemere')`:
 			/* 
 				Here we are delaying the preprocessing by 1 second and returning asynchronously.
 				Not a very useful case, but hopefully you get the idea...
-				Note that if an attempt is made to fetch a resource while it is in the middle of being preprocessed/cached, that fetch request will be queued
-				until the resource is available. This will show up as latency when the resource is accessed by a client for the very first time - For this reason,
-				you should make sure that the preprocessing doesn't take too long to callback - If it does, you may want to perform preprocessing as a background task instead and use the 
-				cachemere.set() method when the preprocessing is done.
+				Note that if an attempt is made to fetch a resource while it is in the middle of 
+				being preprocessed/cached, that fetch request will be queued until the resource is available. 
+				This will show up as latency when the resource is accessed by a client for the very 
+				first time - For this reason, you should make sure that the preprocessing doesn't take too 
+				long to callback - If it does, you may want to perform preprocessing as a background task instead 
+				and use the cachemere.set() method when the preprocessing is done.
 			*/
 			callback(null, data);
 		}, 1000);
