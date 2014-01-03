@@ -87,7 +87,7 @@ These are exposed by `require('cachemere')`:
 
 - `set`
 	- Associates a URL with some content (string or Buffer) - When fetch is called on that URL, the content specified here will be served. This method can be used to
-	override default file content.
+	override a file's real content.
 	- **Parameters**
 		- `options`: An object which can have the following fields:
 			- `url`: The URL on which to serve the specified content
@@ -107,10 +107,12 @@ These are exposed by `require('cachemere')`:
 	- Allows you to specify an optional preprocessor provider. If no prep provider is set, then Cachemere will not preprocess any of your files' contents before caching them.
 	- **Parameters**
 		- `Function`: A function which takes a URL as argument and returns a preprocessor function which will be used by Cachemere to preprocess that file's content. To skip preprocessing for a particular URL, this function should return null.
-		A preprocessor function is in the form function(resourceData) - Where resourceData is an object with a url, path and content property. The content represent's the files content as a Buffer. The preprocessor function can return either a string or a Buffer.
-		The returned value will be cached as the file's preprocessed content.
+		A preprocessor function is in the form function(resourceData, callback) - Where resourceData is an object with a url, path and content property (Note that the content property holds the file's content as a Buffer).
+		The preprocessor function can return (either using a return statement or asynchronously via callback) either a string or a Buffer.
+		The returned value will be cached as the file's preprocessed content (just make sure you only return/callback once). 
+		Note that the callback is in the form callback(err, content) - The err argument should be null if the operation went smoothly.
 
-	**Example:**
+	**Example (synchronous):**
 
 	```js
 	var textFileRegex = /\.txt$/;
@@ -119,6 +121,36 @@ These are exposed by `require('cachemere')`:
 		// Note that resource.content is a Buffer not a string
 		var data = resource.content.toString().replace(/[.]/g, '!');
 		return data;
+	};
+
+	cachemere.setPrepProvider(function (url) {
+		// Only preprocess files with .txt extension
+		if (textFileRegex.test(url)) {
+			return textPrep;
+		}
+		return false;
+	});
+	```
+	
+	**Example (asynchronous):**
+
+	```js
+	var textFileRegex = /\.txt$/;
+
+	var textPrep = function (resource, callback) {
+		// Note that resource.content is a Buffer not a string
+		var data = resource.content.toString().replace(/[.]/g, '!');
+		setTimeout(function () {
+			/* 
+				Here we are delaying the preprocessing by 1 second and returning asynchronously.
+				Not a very useful case, but hopefully you get the idea...
+				Note that if an attempt is made to fetch a resource while it is in the middle of being preprocessed/cached, that fetch request will be queued
+				until the resource is available. This will show up as latency when the resource is accessed by a client for the very first time - For this reason,
+				you should make sure that the preprocessing doesn't take too long to callback - If it does, you may want to perform preprocessing as a background task instead and use the 
+				cachemere.set() method when the preprocessing is done.
+			*/
+			callback(null, data);
+		}, 1000);
 	};
 
 	cachemere.setPrepProvider(function (url) {
