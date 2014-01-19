@@ -27,6 +27,11 @@ var Cachemere = function () {
 	this.ENCODING_PLAIN = Cache.ENCODING_PLAIN;
 	this.ENCODING_GZIP = 'gzip';
 	
+	this.CACHE_TYPE_NONE = Cache.CACHE_TYPE_NONE;
+	this.CACHE_TYPE_WEAK = Cache.CACHE_TYPE_WEAK;
+	this.CACHE_TYPE_STRONG = Cache.CACHE_TYPE_STRONG;
+	this.CACHE_TYPE_PERMANENT = Cache.CACHE_TYPE_PERMANENT;
+	
 	this.init();
 };
 
@@ -44,7 +49,8 @@ Cachemere.prototype.init = function (options) {
 		delayFileUpdate: 1000,
 		mapper: function (url) {
 			return mainDir + url;
-		}
+		},
+		classifier: null
 	};
 	
 	for (var i in options) {
@@ -60,6 +66,16 @@ Cachemere.prototype.init = function (options) {
 	
 	this._useETags = this._options.useETags;
 	this._mapper = this._options.mapper;
+	
+	this._defaultClassifier = function (url, cachemere) {
+		return self.CACHE_TYPE_STRONG;
+	};
+	
+	if (this._options.classifier) {
+		this._classifier = this._options.classifier;
+	} else {
+		this._classifier = this._defaultClassifier;
+	}
 	this._encoding = this._options.compress ? this.ENCODING_GZIP : this.ENCODING_PLAIN;
 	
 	this._prepProvider = null;
@@ -107,8 +123,8 @@ Cachemere.prototype.init = function (options) {
 	this._depWatchers = {};
 	this._deps = {};
 	
-	this._cache.on('set', function (url, encoding, permanent) {
-		if (self._watchers[url] == null && !permanent) {
+	this._cache.on('set', function (url, encoding, cacheType) {
+		if (self._watchers[url] == null && cacheType != self.CACHE_TYPE_PERMANENT) {
 			var filePath = self._mapper(url);
 			fs.exists(filePath, function (exists) {
 				if (exists) {
@@ -127,6 +143,10 @@ Cachemere.prototype.init = function (options) {
 			delete self._watchers[url];
 		}
 	});
+};
+
+Cachemere.prototype.setClassifier = function (classifier) {
+	this._classifier = classifier;
 };
 
 Cachemere.prototype._triggerNotice = function (err) {
@@ -231,7 +251,7 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 					self._triggerError(err);
 				} else {
 					prepContent = self._valueToBuffer(prepContent);
-					self._cache.set(self.ENCODING_PLAIN, url, prepContent, options.permanent);
+					self._cache.set(self.ENCODING_PLAIN, url, prepContent, options.cacheType);
 					
 					cb(null, prepContent);
 				}
@@ -242,11 +262,11 @@ Cachemere.prototype._preprocess = function (options, content, cb) {
 		
 		if (result != null) {
 			result = self._valueToBuffer(result);
-			self._cache.set(self.ENCODING_PLAIN, url, result, options.permanent);
+			self._cache.set(self.ENCODING_PLAIN, url, result, options.cacheType);
 			cb(null, result);
 		}
 	} else {
-		self._cache.set(self.ENCODING_PLAIN, url, content, options.permanent);
+		self._cache.set(self.ENCODING_PLAIN, url, content, options.cacheType);
 		cb(null, content);
 	}
 };
@@ -265,7 +285,7 @@ Cachemere.prototype._compress = function (options, content, cb) {
 			cb(err);
 			self._triggerError(err);
 		} else {
-			self._cache.set(self._encoding, url, result, options.permanent);
+			self._cache.set(self._encoding, url, result, options.cacheType);
 			cb(null, result);
 		}
 	});
@@ -319,7 +339,7 @@ Cachemere.prototype._processUpdates = function (url) {
 		tasks.push(this._addHeaders.bind(this, options));
 	} else {
 		if (options.preprocessed) {
-			this._cache.set(this.ENCODING_PLAIN, url, content, options.permanent);
+			this._cache.set(this.ENCODING_PLAIN, url, content, options.cacheType);
 			if (this._options.compress) {
 				tasks.push(this._compress.bind(this, options, content));
 			}
@@ -357,7 +377,7 @@ Cachemere.prototype.set = function (options, callback) {
 	updateOptions.content = this._valueToBuffer(updateOptions.content);
 	
 	if (updateOptions.content != null && !updateOptions.disableServeRaw && false) {
-		this._cache.set(this.ENCODING_PLAIN, updateOptions.url, updateOptions.content, updateOptions.permanent);
+		this._cache.set(this.ENCODING_PLAIN, updateOptions.url, updateOptions.content, updateOptions.cacheType);
 	}
 
 	if (this._pendingUpdates[updateOptions.url] == null) {
@@ -380,7 +400,7 @@ Cachemere.prototype.setRaw = function (url, content, mime, disableServeRaw, call
 		content: content,
 		mime: mime,
 		disableServeRaw: disableServeRaw,
-		permanent: true
+		cacheType: this.CACHE_TYPE_PERMANENT
 	};
 	this.set(options, callback);
 };
@@ -500,6 +520,10 @@ Cachemere.prototype.fetch = function (req, callback) {
 		this.emit('miss', url, encoding);
 		res.hit = false;
 		res.path = this._mapper(url);
+		if (res.cacheType == null) {
+			res.cacheType = this._classifier(url, self);
+		}
+		
 		this._fetch(res, function (err, content, headers) {
 			if (err) {
 				if (err.type == self.ERROR_TYPE_READ) {

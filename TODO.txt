@@ -7,6 +7,4 @@ so that Cachemere can be directly used as express middleware.
 it can handle per second on standard hardware.
 Add results to the end of the README file.
 
-- Add more examples to README.
-
 - Add some tests (create a new tests/ directory).

@@ -1,10 +1,18 @@
 var EventEmitter = require('events').EventEmitter;
+var ExpiryManager = require('expirymanager').ExpiryManager;
 
 var Cache = function (options) {
 	var self = this;
 	
 	self.ENCODING_PLAIN = Cache.ENCODING_PLAIN;
 	self.ENCODING_SEPARATOR = Cache.ENCODING_SEPARATOR;
+	
+	self.CACHE_TYPE_NONE = Cache.CACHE_TYPE_NONE;
+	self.CACHE_TYPE_WEAK = Cache.CACHE_TYPE_WEAK;
+	self.CACHE_TYPE_STRONG = Cache.CACHE_TYPE_STRONG;
+	self.CACHE_TYPE_PERMANENT = Cache.CACHE_TYPE_PERMANENT;
+	
+	self._expiryManager = new ExpiryManager();
 	
 	self.reset = function () {
 		self._cache = {};
@@ -23,9 +31,20 @@ var Cache = function (options) {
 	
 	self.reset();
 	
-	self._cacheFilter = options.cacheFilter;
 	self._maxSize = options.maxSize || 1000000000;
 	self._maxEntrySize = options.maxEntrySize || 10000000;
+	self._cacheLife = options.cacheLife || 3600;
+	self._expiryCheckInterval = (options.expiryCheckInterval || 10) * 1000;
+	
+	self._expireInterval = setInterval(function () {
+		var keyParts;
+		var expireKeys = self._expiryManager.extractExpiredKeys();
+		
+		for (var i in expireKeys) {
+			keyParts = expireKeys[i].split(self.ENCODING_SEPARATOR);
+			self.clear(keyParts[0], keyParts[1]);
+		}
+	}, self._expiryCheckInterval);
 	
 	self._getFullKey = function (encoding, key) {
 		return encoding + self.ENCODING_SEPARATOR + key;
@@ -68,7 +87,20 @@ var Cache = function (options) {
 		}
 	};
 	
-	self.set = function (encoding, key, data, permanent) {
+	self.set = function (encoding, key, data, cacheType) {
+		if (cacheType == self.CACHE_TYPE_NONE) {
+			return false;
+		}
+		
+		var permanent;
+		var weak;
+		if (cacheType) {
+			permanent = (cacheType == self.CACHE_TYPE_PERMANENT);
+			weak = (cacheType == self.CACHE_TYPE_WEAK);
+		} else {
+			cacheType = self.CACHE_TYPE_STRONG;
+		}
+		
 		if (!(data instanceof Buffer)) {
 			if (typeof data != 'string') {
 				data = data.toString();
@@ -77,44 +109,45 @@ var Cache = function (options) {
 		}
 		
 		var size = data.length;
-		if ((size > self._maxEntrySize || (self._cacheFilter && !self._cacheFilter(key))) && !permanent) {
+		if (size > self._maxEntrySize && !permanent) {
 			return false;
 		}
 		
 		var fullKey = self._getFullKey(encoding, key);
+		
 		if (self._cache.hasOwnProperty(fullKey)) {
+			var headers = self._cache[fullKey].headers || {};
+			self.clear(encoding, key);
 			var now = Date.now();
-			self._cache[fullKey].data = data;
-			self._cache[fullKey].time = now;
 		} else {
-			if (permanent) {
-				self._cache[fullKey] = {data: data, headers: {}, time: Date.now(), permanent: true};
-			} else {
-				var entry = {
-					key: fullKey,
-					size: size
-				};
-				self._floatCacheEntry(entry);
-				self._cache[fullKey] = {data: data, headers: {}, time: Date.now(), entry: entry};
+			headers = {};
+		}
+		
+		if (permanent) {
+			self._cache[fullKey] = {data: data, headers: headers, time: Date.now(), cacheType: cacheType};
+		} else {
+			var entry = {
+				key: fullKey,
+				size: size
+			};
+			self._floatCacheEntry(entry);
+			self._cache[fullKey] = {data: data, headers: headers, time: Date.now(), entry: entry, cacheType: cacheType};
+			if (weak) {
+				self._expiryManager.expire([fullKey], self._cacheLife);
 			}
 		}
 		
 		self._addKeyEncoding(key, encoding);
-		self.emit('set', key, encoding, permanent);
+		self.emit('set', key, encoding, cacheType);
 		
 		self._totalSize += size;
 		
 		var curEntry = self._tail.prev;
 		var keyParts;
-		while (self._totalSize > self._maxSize && curEntry && curEntry.key) {
-			self._totalSize -= curEntry.size;
-			delete self._cache[curEntry.key];
-			self._removeCacheEntry(curEntry);
+		while (self._totalSize > self._maxSize && curEntry && curEntry.key != null) {
 			keyParts = curEntry.key.split(self.ENCODING_SEPARATOR);
+			self.clear(keyParts[0], keyParts[1]);
 			curEntry = self._tail.prev;
-			
-			self._removeKeyEncoding(keyParts[1], keyParts[0]);
-			self.emit('clear', keyParts[1], keyParts[0]);
 		}
 		
 		return true;
@@ -126,6 +159,9 @@ var Cache = function (options) {
 			var entry = self._cache[fullKey].entry;
 			if (entry) {
 				self._floatCacheEntry(entry);
+				if (self._cache[fullKey].cacheType == self.CACHE_TYPE_WEAK) {
+					self._expiryManager.expire([fullKey], self._cacheLife);
+				}
 			}
 			return self._cache[fullKey].data;
 		}
@@ -158,6 +194,14 @@ var Cache = function (options) {
 		if (encoding) {
 			var fullKey = self._getFullKey(encoding, key);
 			if (self._cache[fullKey] != null) {
+				var curEntry = self._cache[fullKey].entry;
+				if (curEntry) {
+					self._totalSize -= curEntry.size;
+					self._removeCacheEntry(curEntry);
+					if (self._cache[fullKey].cacheType == self.CACHE_TYPE_WEAK) {
+						self._expiryManager.unexpire([fullKey]);
+					}
+				}
 				delete self._cache[fullKey];
 				
 				self._removeKeyEncoding(key, encoding);
@@ -179,10 +223,11 @@ var Cache = function (options) {
 		var fullObjectKey = self._getFullKey(encoding, objectKey);
 		
 		if (!self._cache.hasOwnProperty(fullObjectKey)) {
-			self._cache[fullObjectKey] = {headers: {}};
+			return false;
 		}
-		
 		self._cache[fullObjectKey].headers[headerKey] = headerValue;
+		
+		return true;
 	};
 	
 	self.getHeader = function (encoding, objectKey, headerKey) {
@@ -257,5 +302,10 @@ Cache.prototype = Object.create(EventEmitter.prototype);
 
 Cache.ENCODING_PLAIN = 'plain';
 Cache.ENCODING_SEPARATOR = '::';
+
+Cache.CACHE_TYPE_NONE = 0;
+Cache.CACHE_TYPE_WEAK = 1;
+Cache.CACHE_TYPE_STRONG = 2;
+Cache.CACHE_TYPE_PERMANENT = 3;
 
 module.exports.Cache = Cache

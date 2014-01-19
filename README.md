@@ -74,10 +74,12 @@ These are exposed by `require('cachemere')`:
 			- `useETags`: (Optional) A boolean which indicates whether or not to use ETags. ETag values are based on file content hash. Defaults to true.
 			- `ignoreQueryString`: (Optional) A boolean which indicates whether or not to remove query strings from URLs before doing any processing. Defaults to true.
 			- `mapper`: (Optional) A function which maps any given URL to a path on the file system. The default mapper interprets URLs as paths relative to the application's main file.
-			- `cacheFilter`: (Optional) A function which decides whether a resource is cachable. Accepts a URL as argument. Return true to allow the URL to be cached and false to not cache it.
+			- `classifier`: (Optional) A function which decides how a resource should be cached. Takes a URL as the first argument and cachemere as the second argument. Must return either cachemere.CACHE_TYPE_NONE, cachemere.CACHE_TYPE_WEAK or cachemere.CACHE_TYPE_STRONG depending on the type of caching you want to use for that resource.
 			- `maxSize`: (Optional) An integer which indicates the total maximum size of the server cache in bytes. Cachemere will automatically clear least-accessed resources from cache in order to meet the maxSize requirement. Defaults to 1000000000 (1GB).
 			- `maxEntrySize`: (Optional) An integer which indicates the maximum size of a single cache entry in bytes. If a file exceeds this size, it will not be cached. Defaults to 10000000 (10MB).
-			
+			- `delayFileUpdate`: (Optional) An integer which specifies how many milliseconds to delay a cache file update operation - This is to mitigate potential issues related to how various editors save files to disk. Defaults to 1000.
+			- `cacheLife`: (Optional) An integer which specifies how long (in seconds) a cold CACHE_TYPE_WEAK cache entry should be kept in cache. Defaults to 3600 - One hour.
+
 - `fetch`
 	- Fetches a file from cache or from the file system if not already cached. The act of fetching the file for the first time will cause Cachemere to cache it and watch that file for any changes.
 	- **Parameters**
