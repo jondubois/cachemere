@@ -290,9 +290,7 @@ var Cache = function (options) {
 		for (i in self._cache) {
 			if (regex.test(i)) {
 				keyParts = i.split(self.ENCODING_SEPARATOR);
-				delete self._cache[i];
-				self._removeKeyEncoding(keyParts[1], keyParts[0]);
-				self.emit('clear', keyParts[1], keyParts[0]);
+				self.clear(keyParts[1], keyParts[0]);
 			}
 		}
 	};
