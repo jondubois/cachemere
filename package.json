@@ -1,7 +1,7 @@
 {
   "name": "cachemere",
   "description": "A nice, smooth, cushiony layer of cache",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "author": {
     "name": "JF Gros-Dubois",
     "email": "flashthink@gmail.com"

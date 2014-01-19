@@ -128,7 +128,7 @@ Cachemere.prototype.init = function (options) {
 			var filePath = self._mapper(url);
 			fs.exists(filePath, function (exists) {
 				if (exists) {
-					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath, false));
+					self._watchers[url] = fs.watch(filePath, self._handleFileChange.bind(self, url, filePath));
 				}
 			});
 		}
@@ -137,8 +137,8 @@ Cachemere.prototype.init = function (options) {
 		}
 	});
 	
-	this._cache.on('clear', function (url) {
-		if (self._watchers[url] != null) {
+	this._cache.on('clear', function (url, encoding) {
+		if (encoding == self.ENCODING_PLAIN && self._watchers[url] != null) {
 			self._watchers[url].close();
 			delete self._watchers[url];
 		}
@@ -157,7 +157,7 @@ Cachemere.prototype._triggerError = function (err) {
 	this.emit('error', err);
 };
 
-Cachemere.prototype._handleFileChange = function (url, filePath, checkExists) {
+Cachemere.prototype._handleFileChange = function (url, filePath) {
 	var self = this;
 	
 	var options = {
@@ -171,17 +171,14 @@ Cachemere.prototype._handleFileChange = function (url, filePath, checkExists) {
 	}
 	
 	this._pendingFileChanges[url] = setTimeout(function () {
-		if (checkExists) {
-			fs.exists(filePath, function (exists) {
-				if (exists) {
-					self.set(options);
-				}
-				delete self._pendingFileChanges[url];
-			});
-		} else {
-			self.set(options);
+		fs.exists(filePath, function (exists) {
+			if (exists) {
+				self.set(options);
+			} else {
+				self._cache.clear(null, url);
+			}
 			delete self._pendingFileChanges[url];
-		}
+		});
 	}, this._options.delayFileUpdate);
 };
 
@@ -623,7 +620,7 @@ Cachemere.prototype.setDeps = function (url, deps) {
 		var filePath = this._mapper(url);
 		this._depWatchers[url] = [];
 		for (var j in deps) {
-			this._depWatchers[url].push(fs.watch(deps[j], this._handleFileChange.bind(this, url, filePath, true)));
+			this._depWatchers[url].push(fs.watch(deps[j], this._handleFileChange.bind(this, url, filePath)));
 		}
 		this._deps[url] = deps;
 	} else if (this._deps[url]) {
