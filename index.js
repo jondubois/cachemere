@@ -373,7 +373,7 @@ Cachemere.prototype.set = function (options, callback) {
 	updateOptions.url = this._simplifyURL(updateOptions.url);
 	updateOptions.content = this._valueToBuffer(updateOptions.content);
 	
-	if (updateOptions.content != null && !updateOptions.disableServeRaw && false) {
+	if (updateOptions.content != null && updateOptions.allowServeRaw) {
 		this._cache.set(this.ENCODING_PLAIN, updateOptions.url, updateOptions.content, updateOptions.cacheType);
 	}
 
@@ -391,12 +391,12 @@ Cachemere.prototype.set = function (options, callback) {
 	}
 };
 
-Cachemere.prototype.setRaw = function (url, content, mime, disableServeRaw, callback) {
+Cachemere.prototype.setRaw = function (url, content, mime, allowServeRaw, callback) {
 	var options = {
 		url: url,
 		content: content,
 		mime: mime,
-		disableServeRaw: disableServeRaw,
+		allowServeRaw: allowServeRaw,
 		cacheType: this.CACHE_TYPE_PERMANENT
 	};
 	this.set(options, callback);
