@@ -101,11 +101,15 @@ var Cache = function (options) {
 			cacheType = self.CACHE_TYPE_STRONG;
 		}
 		
-		if (!(data instanceof Buffer)) {
-			if (typeof data != 'string') {
-				data = data.toString();
+		if (data == null) {
+			data = new Buffer('');
+		} else {
+			if (!(data instanceof Buffer)) {
+				if (typeof data != 'string') {
+					data = data.toString();
+				}
+				data = new Buffer(data);
 			}
-			data = new Buffer(data);
 		}
 		
 		var size = data.length;
