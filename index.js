@@ -322,7 +322,7 @@ Cachemere.prototype._processUpdates = function (url) {
 		options.path = this._mapper(url);
 	}
 	if (options.mime == null) {
-		options.mime = mime.lookup(options.path || url);
+		options.mime = mime.getType(options.path || url);
 	}
 	
 	var tasks = [];
@@ -420,7 +420,7 @@ Cachemere.prototype._fetch = function (options, callback) {
 			options.path = this._mapper(url);
 		}
 		if (options.mime == null) {
-			options.mime = mime.lookup(options.path || url);
+			options.mime = mime.getType(options.path || url);
 		}
 
 		if (self._cache.has(self.ENCODING_PLAIN, url)) {
